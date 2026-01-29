@@ -179,6 +179,12 @@ class BaseOpenAIClient(LLMClient):
                 return {'extracted_entities': converted_list}
             
             # Check if extracted_entities exists
+            # First check for other known wrapper keys (edges, entity_resolutions, entity_classifications)
+            known_wrapper_keys = {'edges', 'entity_resolutions', 'entity_classifications'}
+            if isinstance(parsed_result, dict) and any(key in parsed_result for key in known_wrapper_keys):
+                logger.debug(f'[LLM Response] Found known wrapper key in structured response, returning as-is')
+                return parsed_result
+                
             if isinstance(parsed_result, dict) and 'extracted_entities' not in parsed_result:
                 # Check if this is a single entity (has entity_type_id or name after conversion)
                 # First, convert entity/entity_name field to name if present
@@ -312,6 +318,12 @@ class BaseOpenAIClient(LLMClient):
             return {'extracted_entities': converted_list}
         
         # Check if extracted_entities exists
+        # First check for other known wrapper keys (edges, entity_resolutions, entity_classifications)
+        known_wrapper_keys = {'edges', 'entity_resolutions', 'entity_classifications'}
+        if any(key in parsed_result for key in known_wrapper_keys):
+            logger.debug(f'[LLM Response] Found known wrapper key in response, returning as-is')
+            return parsed_result
+            
         if 'extracted_entities' not in parsed_result:
             # Check if this is a single entity (has entity_type_id or name after conversion)
             # First, convert entity/entity_name field to name if present
