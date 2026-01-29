@@ -228,6 +228,8 @@ class BaseOpenAIClient(LLMClient):
         elif response_object and hasattr(response_object, 'refusal') and response_object.refusal:
             raise RefusalError(response_object.refusal)
         else:
+            # Log more details for debugging
+            logger.error(f'[LLM Response] Invalid response structure. Type: {type(response_object)}, Has output_text: {hasattr(response_object, "output_text")}, response: {response_object}')
             raise Exception(f'Invalid response from LLM: {response_object}')
 
     def _infer_wrapper_key(self, items_list: list[dict]) -> str:
