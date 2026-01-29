@@ -90,7 +90,24 @@ class OpenAIClient(BaseOpenAIClient):
             model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
         )
 
-        # Try using responses.parse() first (OpenAI's structured output API)
+        # For Alibaba Cloud, directly use JSON mode instead of responses.parse()
+        # because responses.parse() doesn't work properly with Alibaba Cloud
+        is_alibaba = self._is_alibaba_provider()
+        logger.debug(f'[LLM Debug] _create_structured_completion: is_alibaba={is_alibaba}, client.base_url={self.client.base_url}')
+        
+        if is_alibaba:
+            logger.info('[LLM] Using JSON mode for Alibaba Cloud provider')
+            # Alibaba Cloud requires 'json' to be mentioned in messages when using JSON mode
+            modified_messages = self._ensure_json_in_messages(messages)
+            return await self.client.chat.completions.create(
+                model=model,
+                messages=modified_messages,
+                temperature=temperature if not is_reasoning_model else None,
+                max_tokens=max_tokens,
+                response_format={'type': 'json_object'},
+            )
+
+        # For other providers, try using responses.parse() first (OpenAI's structured output API)
         request_kwargs = {
             'model': model,
             'input': messages,  # type: ignore
@@ -116,44 +133,40 @@ class OpenAIClient(BaseOpenAIClient):
             response = await client_for_responses.responses.parse(**request_kwargs)
             return response
         except Exception as e:
-            # If responses.parse() fails, check if it's an Alibaba Cloud provider
-            # and try to use the chat completions endpoint with JSON format
-            if self._is_alibaba_provider():
-                logger.warning(
-                    f'[LLM] responses.parse() failed for Alibaba Cloud: {e}. '
-                    'Falling back to JSON mode.'
-                )
-                # Alibaba Cloud requires 'json' to be mentioned in messages when using JSON mode
-                modified_messages = self._ensure_json_in_messages(messages)
-                return await self.client.chat.completions.create(
-                    model=model,
-                    messages=modified_messages,
-                    temperature=temperature_value,
-                    max_tokens=max_tokens,
-                    response_format={'type': 'json_object'},
-                )
-            else:
-                # For non-Alibaba providers, still try the fallback
-                logger.warning(
-                    f'[LLM] responses.parse() failed: {e}. '
-                    'Falling back to chat.completions with JSON format.'
-                )
-                return await self.client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature_value,
-                    max_tokens=max_tokens,
-                    response_format={'type': 'json_object'},
-                )
+            # For non-Alibaba providers, still try the fallback
+            logger.warning(
+                f'[LLM] responses.parse() failed: {e}. '
+                'Falling back to chat.completions with JSON format.'
+            )
+            return await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature_value,
+                max_tokens=max_tokens,
+                response_format={'type': 'json_object'},
+            )
 
     def _is_alibaba_provider(self) -> bool:
         """Check if the current client is using Alibaba Cloud (Qwen/DashScope)."""
+        # Check main client
         base_url = self.client.base_url
-        if not base_url:
-            return False
-        # Convert URL object to string if needed
-        base_url_str = str(base_url) if not isinstance(base_url, str) else base_url
-        return 'dashscope.aliyuncs.com' in base_url_str
+        if base_url:
+            base_url_str = str(base_url) if not isinstance(base_url, str) else base_url
+            if 'dashscope.aliyuncs.com' in base_url_str:
+                logger.debug(f'[LLM Debug] Alibaba provider detected in main client: {base_url_str}')
+                return True
+        
+        # Check responses client if it exists
+        if self.responses_client:
+            responses_base_url = self.responses_client.base_url
+            if responses_base_url:
+                responses_base_url_str = str(responses_base_url) if not isinstance(responses_base_url, str) else responses_base_url
+                if 'dashscope.aliyuncs.com' in responses_base_url_str:
+                    logger.debug(f'[LLM Debug] Alibaba provider detected in responses client: {responses_base_url_str}')
+                    return True
+        
+        logger.debug(f'[LLM Debug] Not an Alibaba provider. Main client base_url: {base_url}')
+        return False
 
     def _ensure_json_in_messages(
         self, messages: list[ChatCompletionMessageParam]
