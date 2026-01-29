@@ -6,19 +6,22 @@
 # See README.md "Concurrency and LLM Provider 429 Rate Limit Errors" section for tuning guidance
 
 server:
-  transport: "http"  # Options: stdio, sse (deprecated), http
+  transport: "sse"  # Options: stdio, sse (deprecated), http
   host: "0.0.0.0"
   port: 8000
   
 llm:
   provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-4o-mini"
+  model: "qwen3-max-2026-01-23"
   max_tokens: 4096
   
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
-      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      api_url: ${OPENAI_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      # For Alibaba Cloud (Qwen), you can optionally specify a different endpoint for responses.parse()
+      # Default: uses the same api_url for both endpoints
+      responses_endpoint: ${OPENAI_RESPONSES_URL:https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
       
     azure_openai:
@@ -44,13 +47,13 @@ llm:
 
 embedder:
   provider: "openai"  # Options: openai, azure_openai, gemini, voyage
-  model: "text-embedding-3-small"
+  model: "text-embedding-v4"  # DeepSeek 兼容的嵌入模型
   dimensions: 1536
   
   providers:
     openai:
       api_key: ${OPENAI_API_KEY}
-      api_url: ${OPENAI_API_URL:https://api.openai.com/v1}
+      api_url: ${OPENAI_API_URL:https://api.deepseek.com/v1}
       organization_id: ${OPENAI_ORGANIZATION_ID:}
       
     azure_openai:
@@ -71,7 +74,7 @@ embedder:
       model: "voyage-3"
 
 database:
-  provider: "falkordb"  # Default: falkordb. Options: neo4j, falkordb
+  provider: "neo4j"  # Default: falkordb. Options: neo4j, falkordb
 
   providers:
     falkordb:

@@ -90,6 +90,11 @@ class OpenAIProviderConfig(BaseModel):
     api_key: str | None = None
     api_url: str = 'https://api.openai.com/v1'
     organization_id: str | None = None
+    responses_endpoint: str | None = Field(
+        default=None,
+        description='Alternative endpoint for responses.parse() API. '
+        'Useful for providers like Alibaba Cloud that have separate endpoints.',
+    )
 
 
 class AzureOpenAIProviderConfig(BaseModel):

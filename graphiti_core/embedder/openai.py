@@ -42,25 +42,51 @@ class OpenAIEmbedder(EmbedderClient):
         config: OpenAIEmbedderConfig | None = None,
         client: AsyncOpenAI | AsyncAzureOpenAI | None = None,
     ):
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if config is None:
             config = OpenAIEmbedderConfig()
         self.config = config
+        
+        logger.info(f'>>> [OpenAIEmbedder] Initializing with model: {config.embedding_model}, base_url: {config.base_url}, embedding_dim: {config.embedding_dim}')
 
         if client is not None:
             self.client = client
         else:
             self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+            logger.info(f'>>> [OpenAIEmbedder] Created new AsyncOpenAI client')
 
     async def create(
         self, input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]]
     ) -> list[float]:
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f'>>> [OpenAIEmbedder] Creating embedding for input: {input_data}')
+        logger.info(f'>>> [OpenAIEmbedder] Using model: {self.config.embedding_model}')
+        
         result = await self.client.embeddings.create(
             input=input_data, model=self.config.embedding_model
         )
-        return result.data[0].embedding[: self.config.embedding_dim]
+        
+        embedding = result.data[0].embedding[: self.config.embedding_dim]
+        logger.info(f'>>> [OpenAIEmbedder] Embedding created successfully, length: {len(embedding)}')
+        
+        return embedding
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f'>>> [OpenAIEmbedder] Creating batch embeddings for {len(input_data_list)} inputs')
+        logger.info(f'>>> [OpenAIEmbedder] Using model: {self.config.embedding_model}')
+        
         result = await self.client.embeddings.create(
             input=input_data_list, model=self.config.embedding_model
         )
-        return [embedding.embedding[: self.config.embedding_dim] for embedding in result.data]
+        
+        embeddings = [embedding.embedding[: self.config.embedding_dim] for embedding in result.data]
+        logger.info(f'>>> [OpenAIEmbedder] Batch embeddings created successfully, {len(embeddings)} embeddings, each length: {len(embeddings[0]) if embeddings else 0}')
+        
+        return embeddings

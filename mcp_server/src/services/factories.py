@@ -129,12 +129,32 @@ class LLMClientFactory:
                     'gpt-5-nano' if is_reasoning_model else 'gpt-4.1-mini'
                 )  # Use reasoning model for small tasks if main model is reasoning
 
+                api_url = config.providers.openai.api_url
+
+                # For Alibaba Cloud (Qwen), configure the responses endpoint if needed
+                responses_url = None
+                if config.providers.openai.responses_endpoint:
+                    responses_url = config.providers.openai.responses_endpoint
+                elif api_url and 'dashscope.aliyuncs.com' in api_url:
+                    # Auto-configure for Alibaba Cloud if using the standard endpoint
+                    # If using the /compatible-mode/v1 endpoint, also set the responses endpoint
+                    if '/compatible-mode/v1' in api_url:
+                        responses_url = api_url.replace(
+                            '/compatible-mode/v1',
+                            '/api/v2/apps/protocols/compatible-mode/v1',
+                        )
+                        logger.info(
+                            f'[LLM] Auto-configured Alibaba Cloud responses endpoint: {responses_url}'
+                        )
+
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
+                    base_url=api_url,
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
+                    responses_url=responses_url,
                 )
 
                 # Only pass reasoning/verbosity parameters for reasoning models (gpt-5 family)
@@ -261,6 +281,7 @@ class EmbedderFactory:
         logger = logging.getLogger(__name__)
 
         provider = config.provider.lower()
+        logger.info(f'>>> [EmbedderFactory] Starting embedder creation for provider: {provider}, model: {config.model}, dimensions: {config.dimensions}')
 
         match provider:
             case 'openai':
@@ -272,11 +293,19 @@ class EmbedderFactory:
 
                 from graphiti_core.embedder.openai import OpenAIEmbedderConfig
 
+                api_url = config.providers.openai.api_url
+                logger.info(f'>>> [EmbedderFactory] Creating OpenAI Embedder with model: {config.model}, api_url: {api_url}')
+
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
                     embedding_model=config.model,
+                    base_url=api_url,
+                    embedding_dim=config.dimensions,
                 )
-                return OpenAIEmbedder(config=embedder_config)
+                logger.info(f'>>> [EmbedderFactory] OpenAIEmbedderConfig created successfully')
+                embedder = OpenAIEmbedder(config=embedder_config)
+                logger.info(f'>>> [EmbedderFactory] OpenAI Embedder client created successfully')
+                return embedder
 
             case 'azure_openai':
                 if not HAS_AZURE_EMBEDDER:

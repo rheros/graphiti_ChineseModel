@@ -489,9 +489,10 @@ class EntityNode(Node):
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
         text = self.name.replace('\n', ' ')
+        logger.info(f'[Embedder] Generating name embedding for entity node: {text}')
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
-        logger.debug(f'embedded {text} in {end - start} ms')
+        logger.info(f'[Embedder] Generated name embedding for entity node: {text} (length: {len(self.name_embedding) if self.name_embedding else 0}, time: {end - start:.2f} ms)')
 
         return self.name_embedding
 
@@ -694,9 +695,10 @@ class CommunityNode(Node):
     async def generate_name_embedding(self, embedder: EmbedderClient):
         start = time()
         text = self.name.replace('\n', ' ')
+        logger.info(f'[Embedder] Generating name embedding for community node: {text}')
         self.name_embedding = await embedder.create(input_data=[text])
         end = time()
-        logger.debug(f'embedded {text} in {end - start} ms')
+        logger.info(f'[Embedder] Generated name embedding for community node: {text} (length: {len(self.name_embedding) if self.name_embedding else 0}, time: {end - start:.2f} ms)')
 
         return self.name_embedding
 
@@ -1064,8 +1066,19 @@ async def create_entity_node_embeddings(embedder: EmbedderClient, nodes: list[En
     filtered_nodes = [node for node in nodes if node.name]
 
     if not filtered_nodes:
+        logger.info('[Embedder] No nodes to generate embeddings for')
         return
 
-    name_embeddings = await embedder.create_batch([node.name for node in filtered_nodes])
+    logger.info(f'[Embedder] Generating batch embeddings for {len(filtered_nodes)} entity nodes')
+    start = time()
+    node_names = [node.name for node in filtered_nodes]
+    logger.debug(f'[Embedder] Node names for embedding: {node_names[:5]}' + (f'... and {len(node_names) - 5} more' if len(node_names) > 5 else ''))
+    
+    name_embeddings = await embedder.create_batch(node_names)
+    end = time()
+    
+    logger.info(f'[Embedder] Generated batch embeddings for {len(filtered_nodes)} entity nodes in {end - start:.2f} ms')
+    
     for node, name_embedding in zip(filtered_nodes, name_embeddings, strict=True):
         node.name_embedding = name_embedding
+        logger.debug(f'[Embedder] Set embedding for node: {node.name} (length: {len(name_embedding) if name_embedding else 0})')

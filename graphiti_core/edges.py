@@ -285,10 +285,11 @@ class EntityEdge(Edge):
         start = time()
 
         text = self.fact.replace('\n', ' ')
+        logger.info(f'[Embedder] Generating fact embedding for entity edge: {text[:100]}' + (f'...' if len(text) > 100 else ''))
         self.fact_embedding = await embedder.create(input_data=[text])
 
         end = time()
-        logger.debug(f'embedded {text} in {end - start} ms')
+        logger.info(f'[Embedder] Generated fact embedding for entity edge: {text[:100]}' + (f'...' if len(text) > 100 else '') + f' (length: {len(self.fact_embedding) if self.fact_embedding else 0}, time: {end - start:.2f} ms)')
 
         return self.fact_embedding
 
@@ -1030,7 +1031,19 @@ async def create_entity_edge_embeddings(embedder: EmbedderClient, edges: list[En
     filtered_edges = [edge for edge in edges if edge.fact]
 
     if len(filtered_edges) == 0:
+        logger.info('[Embedder] No edges to generate embeddings for')
         return
-    fact_embeddings = await embedder.create_batch([edge.fact for edge in filtered_edges])
+    
+    logger.info(f'[Embedder] Generating batch embeddings for {len(filtered_edges)} entity edges')
+    start = time()
+    edge_facts = [edge.fact for edge in filtered_edges]
+    logger.debug(f'[Embedder] Edge facts for embedding: {[fact[:50] + ("..." if len(fact) > 50 else "") for fact in edge_facts[:3]]}' + (f'... and {len(edge_facts) - 3} more' if len(edge_facts) > 3 else ''))
+    
+    fact_embeddings = await embedder.create_batch(edge_facts)
+    end = time()
+    
+    logger.info(f'[Embedder] Generated batch embeddings for {len(filtered_edges)} entity edges in {end - start:.2f} ms')
+    
     for edge, fact_embedding in zip(filtered_edges, fact_embeddings, strict=True):
         edge.fact_embedding = fact_embedding
+        logger.debug(f'[Embedder] Set embedding for edge: {edge.fact[:50]}' + (f'...' if len(edge.fact) > 50 else '') + f' (length: {len(fact_embedding) if fact_embedding else 0})')

@@ -115,19 +115,242 @@ class BaseOpenAIClient(LLMClient):
 
     def _handle_structured_response(self, response: Any) -> dict[str, Any]:
         """Handle structured response parsing and validation."""
+        # Try to get output_text, if not available, return empty result
+        if not hasattr(response, 'output_text'):
+            logger.error('[LLM Response] Response object does not have output_text attribute')
+            return {'extracted_entities': []}
+
         response_object = response.output_text
 
         if response_object:
-            return json.loads(response_object)
-        elif response_object.refusal:
+            # Check if response_object is already a parsed object
+            if isinstance(response_object, (list, dict)):
+                parsed_result = response_object
+                logger.debug(f'[LLM Response] Raw structured response (already parsed): {parsed_result}')
+            else:
+                # Try to parse as JSON string
+                try:
+                    parsed_result = json.loads(response_object)
+                    logger.debug(f'[LLM Response] Raw parsed structured response: {parsed_result}')
+                except (TypeError, json.JSONDecodeError):
+                    # If parsing fails, treat as raw value
+                    parsed_result = response_object
+                    logger.debug(f'[LLM Response] Raw structured response (treated as raw): {parsed_result}')
+            
+            # Handle list responses by wrapping in appropriate container
+            if isinstance(parsed_result, list):
+                wrapper_key = self._infer_wrapper_key(parsed_result)
+                logger.info(f'[LLM Response] Received list response in structured format, wrapping in {wrapper_key}: {parsed_result[:2]}' + (f'... and {len(parsed_result) - 2} more' if len(parsed_result) > 2 else ''))
+                # Convert entity/entity_name fields to name fields
+                converted_list = []
+                for item in parsed_result:
+                    if isinstance(item, dict):
+                        # Create a new dict to ensure we don't have entity/entity_name fields
+                        new_item = {}
+                        for key, value in item.items():
+                            if key in ('entity', 'entity_name'):
+                                new_item['name'] = value
+                            else:
+                                new_item[key] = value
+                        logger.debug(f'[LLM Response] Converted entity/entity_name field to name field: {new_item}')
+                        converted_list.append(new_item)
+                    else:
+                        converted_list.append(item)
+                return {wrapper_key: converted_list}
+            
+            # Handle {'entities': [...]} format
+            if isinstance(parsed_result, dict) and 'entities' in parsed_result and isinstance(parsed_result['entities'], list):
+                logger.info(f'[LLM Response] Received entities format in structured format, converting to extracted_entities')
+                # Convert entity/entity_name fields to name fields
+                converted_list = []
+                for item in parsed_result['entities']:
+                    if isinstance(item, dict):
+                        # Create a new dict to ensure we don't have entity/entity_name fields
+                        new_item = {}
+                        for key, value in item.items():
+                            if key in ('entity', 'entity_name'):
+                                new_item['name'] = value
+                            else:
+                                new_item[key] = value
+                        logger.debug(f'[LLM Response] Converted entity/entity_name field to name field: {new_item}')
+                        converted_list.append(new_item)
+                    else:
+                        converted_list.append(item)
+                return {'extracted_entities': converted_list}
+            
+            # Check if extracted_entities exists
+            if isinstance(parsed_result, dict) and 'extracted_entities' not in parsed_result:
+                # Check if this is a single entity (has entity_type_id or name after conversion)
+                # First, convert entity/entity_name field to name if present
+                if 'entity' in parsed_result or 'entity_name' in parsed_result:
+                    new_item = {}
+                    for key, value in parsed_result.items():
+                        if key in ('entity', 'entity_name'):
+                            new_item['name'] = value
+                        else:
+                            new_item[key] = value
+                    parsed_result = new_item
+                    logger.debug(f'[LLM Response] Converted entity/entity_name field to name field: {parsed_result}')
+
+                # Now check if this looks like a single entity
+                if 'name' in parsed_result or 'entity_type_id' in parsed_result:
+                    logger.info(f'[LLM Response] Received single entity response, wrapping in extracted_entities')
+                    return {'extracted_entities': [parsed_result]}
+                else:
+                    logger.warning(f'[LLM Response] No extracted_entities field found in response: {parsed_result}')
+                    # Return empty extracted_entities to avoid validation error
+                    return {'extracted_entities': []}
+            elif isinstance(parsed_result, dict) and 'extracted_entities' in parsed_result:
+                # Convert entity/entity_name fields to name fields in extracted_entities
+                if isinstance(parsed_result['extracted_entities'], list):
+                    converted_list = []
+                    for item in parsed_result['extracted_entities']:
+                        if isinstance(item, dict):
+                            # Create a new dict to ensure we don't have entity/entity_name fields
+                            new_item = {}
+                            for key, value in item.items():
+                                if key in ('entity', 'entity_name'):
+                                    new_item['name'] = value
+                                else:
+                                    new_item[key] = value
+                            logger.debug(f'[LLM Response] Converted entity/entity_name field to name field: {new_item}')
+                            converted_list.append(new_item)
+                        else:
+                            converted_list.append(item)
+                    parsed_result['extracted_entities'] = converted_list
+            
+            # If parsed_result is not a dict, wrap it in extracted_entities
+            if not isinstance(parsed_result, dict):
+                logger.warning(f'[LLM Response] Received non-dict response: {parsed_result}, wrapping in extracted_entities')
+                return {'extracted_entities': []}
+            
+            return parsed_result
+        elif response_object and hasattr(response_object, 'refusal') and response_object.refusal:
             raise RefusalError(response_object.refusal)
         else:
-            raise Exception(f'Invalid response from LLM: {response_object.model_dump()}')
+            raise Exception(f'Invalid response from LLM: {response_object}')
+
+    def _infer_wrapper_key(self, items_list: list[dict]) -> str:
+        """
+        Infer the correct wrapper key based on the structure of list items.
+        
+        Returns:
+            'extracted_entities' for entity extraction responses
+            'entity_resolutions' for node deduplication responses
+            'items' as fallback for generic list responses
+        """
+        if not items_list or not isinstance(items_list[0], dict):
+            return 'items'
+        
+        # Check the first item's keys to determine the response type
+        first_item = items_list[0]
+        keys = set(first_item.keys())
+        
+        # Node deduplication responses typically have: id, name, duplicate_idx, duplicates
+        if 'duplicate_idx' in keys and 'duplicates' in keys:
+            return 'entity_resolutions'
+        
+        # Entity extraction responses typically have: name, entity_type_id
+        if 'entity_type_id' in keys:
+            return 'extracted_entities'
+        
+        # Entity classification triples have: uuid, name, entity_type
+        if 'uuid' in keys and 'entity_type' in keys:
+            return 'entity_classifications'
+        
+        # Default to extracted_entities for backward compatibility
+        return 'extracted_entities'
 
     def _handle_json_response(self, response: Any) -> dict[str, Any]:
         """Handle JSON response parsing."""
         result = response.choices[0].message.content or '{}'
-        return json.loads(result)
+        parsed_result = json.loads(result)
+        logger.debug(f'[LLM Response] Raw parsed JSON response: {parsed_result}')
+        
+        # Handle list responses by wrapping in appropriate container
+        if isinstance(parsed_result, list):
+            # Try to infer the correct wrapper field based on the list items
+            wrapper_key = self._infer_wrapper_key(parsed_result)
+            logger.info(f'[LLM Response] Received list response, wrapping in {wrapper_key}: {parsed_result[:2]}' + (f'... and {len(parsed_result) - 2} more' if len(parsed_result) > 2 else ''))
+            # Convert entity/entity_name fields to name fields
+            converted_list = []
+            for item in parsed_result:
+                if isinstance(item, dict):
+                    # Create a new dict to ensure we don't have entity/entity_name fields
+                    new_item = {}
+                    for key, value in item.items():
+                        if key in ('entity', 'entity_name'):
+                            new_item['name'] = value
+                        else:
+                            new_item[key] = value
+                    logger.debug(f'[LLM Response] Converted entity/entity_name field to name field: {new_item}')
+                    converted_list.append(new_item)
+                else:
+                    converted_list.append(item)
+            return {wrapper_key: converted_list}
+        
+        # Handle {'entities': [...]} format
+        if 'entities' in parsed_result and isinstance(parsed_result['entities'], list):
+            logger.info(f'[LLM Response] Received entities format, converting to extracted_entities')
+            # Convert entity/entity_name fields to name fields
+            converted_list = []
+            for item in parsed_result['entities']:
+                if isinstance(item, dict):
+                    # Create a new dict to ensure we don't have entity/entity_name fields
+                    new_item = {}
+                    for key, value in item.items():
+                        if key in ('entity', 'entity_name'):
+                            new_item['name'] = value
+                        else:
+                            new_item[key] = value
+                    logger.debug(f'[LLM Response] Converted entity/entity_name field to name field: {new_item}')
+                    converted_list.append(new_item)
+                else:
+                    converted_list.append(item)
+            return {'extracted_entities': converted_list}
+        
+        # Check if extracted_entities exists
+        if 'extracted_entities' not in parsed_result:
+            # Check if this is a single entity (has entity_type_id or name after conversion)
+            # First, convert entity/entity_name field to name if present
+            if 'entity' in parsed_result or 'entity_name' in parsed_result:
+                new_item = {}
+                for key, value in parsed_result.items():
+                    if key in ('entity', 'entity_name'):
+                        new_item['name'] = value
+                    else:
+                        new_item[key] = value
+                parsed_result = new_item
+                logger.debug(f'[LLM Response] Converted entity/entity_name field to name field: {parsed_result}')
+
+            # Now check if this looks like a single entity
+            if 'name' in parsed_result or 'entity_type_id' in parsed_result:
+                logger.info(f'[LLM Response] Received single entity response, wrapping in extracted_entities')
+                return {'extracted_entities': [parsed_result]}
+            else:
+                logger.warning(f'[LLM Response] No extracted_entities field found in JSON response: {parsed_result}')
+                # Return empty extracted_entities to avoid validation error
+                return {'extracted_entities': []}
+        else:
+            # Convert entity/entity_name fields to name fields in extracted_entities
+            if isinstance(parsed_result['extracted_entities'], list):
+                converted_list = []
+                for item in parsed_result['extracted_entities']:
+                    if isinstance(item, dict):
+                        # Create a new dict to ensure we don't have entity/entity_name fields
+                        new_item = {}
+                        for key, value in item.items():
+                            if key in ('entity', 'entity_name'):
+                                new_item['name'] = value
+                            else:
+                                new_item[key] = value
+                        logger.debug(f'[LLM Response] Converted entity/entity_name field to name field: {new_item}')
+                        converted_list.append(new_item)
+                    else:
+                        converted_list.append(item)
+                parsed_result['extracted_entities'] = converted_list
+        
+        return parsed_result
 
     async def _generate_response(
         self,
@@ -151,7 +374,12 @@ class BaseOpenAIClient(LLMClient):
                     reasoning=self.reasoning,
                     verbosity=self.verbosity,
                 )
-                return self._handle_structured_response(response)
+                # Check if response has output_text attribute (responses.parse() format)
+                # If not, it's a chat.completions response (JSON format)
+                if hasattr(response, 'output_text'):
+                    return self._handle_structured_response(response)
+                else:
+                    return self._handle_json_response(response)
             else:
                 response = await self._create_completion(
                     model=model,

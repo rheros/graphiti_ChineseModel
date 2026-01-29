@@ -42,6 +42,7 @@ class LLMConfig:
         temperature: float = DEFAULT_TEMPERATURE,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         small_model: str | None = None,
+        responses_url: str | None = None,
     ):
         """
         Initialize the LLMConfig with the provided parameters.
@@ -59,6 +60,10 @@ class LLMConfig:
 
                 small_model (str, optional): The specific LLM model to use for generating responses of simpler prompts.
                                                                 Defaults to "gpt-4.1-nano".
+
+                responses_url (str, optional): A separate URL for the responses.parse() API.
+                                                                          Useful for providers like Alibaba Cloud that have different endpoints
+                                                                          for different API versions. If not provided, base_url is used.
         """
         self.base_url = base_url
         self.api_key = api_key
@@ -66,3 +71,4 @@ class LLMConfig:
         self.small_model = small_model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.responses_url = responses_url

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import logging
 import typing
 
 from openai import AsyncOpenAI
@@ -22,6 +23,8 @@ from pydantic import BaseModel
 
 from .config import DEFAULT_MAX_TOKENS, LLMConfig
 from .openai_base_client import DEFAULT_REASONING, DEFAULT_VERBOSITY, BaseOpenAIClient
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIClient(BaseOpenAIClient):
@@ -33,6 +36,7 @@ class OpenAIClient(BaseOpenAIClient):
 
     Attributes:
         client (AsyncOpenAI): The OpenAI client used to interact with the API.
+        responses_client (AsyncOpenAI | None): An optional separate client for responses.parse() API.
     """
 
     def __init__(
@@ -59,8 +63,16 @@ class OpenAIClient(BaseOpenAIClient):
 
         if client is None:
             self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
+            # Create a separate client for responses.parse() if a different URL is provided
+            if config.responses_url and config.responses_url != config.base_url:
+                self.responses_client = AsyncOpenAI(
+                    api_key=config.api_key, base_url=config.responses_url
+                )
+            else:
+                self.responses_client = None
         else:
             self.client = client
+            self.responses_client = None
 
     async def _create_structured_completion(
         self,
@@ -78,6 +90,7 @@ class OpenAIClient(BaseOpenAIClient):
             model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
         )
 
+        # Try using responses.parse() first (OpenAI's structured output API)
         request_kwargs = {
             'model': model,
             'input': messages,  # type: ignore
@@ -96,9 +109,99 @@ class OpenAIClient(BaseOpenAIClient):
         if is_reasoning_model and verbosity is not None:
             request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
 
-        response = await self.client.responses.parse(**request_kwargs)
+        # Use the responses_client if available, otherwise use the main client
+        client_for_responses = self.responses_client or self.client
 
-        return response
+        try:
+            response = await client_for_responses.responses.parse(**request_kwargs)
+            return response
+        except Exception as e:
+            # If responses.parse() fails, check if it's an Alibaba Cloud provider
+            # and try to use the chat completions endpoint with JSON format
+            if self._is_alibaba_provider():
+                logger.warning(
+                    f'[LLM] responses.parse() failed for Alibaba Cloud: {e}. '
+                    'Falling back to JSON mode.'
+                )
+                # Alibaba Cloud requires 'json' to be mentioned in messages when using JSON mode
+                modified_messages = self._ensure_json_in_messages(messages)
+                return await self.client.chat.completions.create(
+                    model=model,
+                    messages=modified_messages,
+                    temperature=temperature_value,
+                    max_tokens=max_tokens,
+                    response_format={'type': 'json_object'},
+                )
+            else:
+                # For non-Alibaba providers, still try the fallback
+                logger.warning(
+                    f'[LLM] responses.parse() failed: {e}. '
+                    'Falling back to chat.completions with JSON format.'
+                )
+                return await self.client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature_value,
+                    max_tokens=max_tokens,
+                    response_format={'type': 'json_object'},
+                )
+
+    def _is_alibaba_provider(self) -> bool:
+        """Check if the current client is using Alibaba Cloud (Qwen/DashScope)."""
+        base_url = self.client.base_url
+        if not base_url:
+            return False
+        # Convert URL object to string if needed
+        base_url_str = str(base_url) if not isinstance(base_url, str) else base_url
+        return 'dashscope.aliyuncs.com' in base_url_str
+
+    def _ensure_json_in_messages(
+        self, messages: list[ChatCompletionMessageParam]
+    ) -> list[ChatCompletionMessageParam]:
+        """
+        Ensure messages contain the word 'json' for Alibaba Cloud's JSON mode requirement.
+
+        Alibaba Cloud's API requires that the word 'json' appears somewhere in the messages
+        when using response_format={'type': 'json_object'}.
+        """
+        import copy
+
+        modified_messages = copy.deepcopy(messages)
+
+        # Check if 'json' already exists in any message content
+        has_json = False
+        for msg in modified_messages:
+            content = msg.get('content', '')
+            if isinstance(content, str) and 'json' in content.lower():
+                has_json = True
+                break
+
+        # If not found, add it to the last message
+        if not has_json and modified_messages:
+            last_msg = modified_messages[-1]
+            current_content = last_msg.get('content', '')
+
+            if isinstance(current_content, str):
+                # Append JSON instruction
+                last_msg['content'] = (
+                    current_content
+                    + '\n\nIMPORTANT: You must respond with valid JSON format.'
+                )
+            elif isinstance(current_content, list) and current_content:
+                # Handle multimodal content (text + images)
+                last_text_item = None
+                for item in reversed(current_content):
+                    if isinstance(item, dict) and item.get('type') == 'text':
+                        last_text_item = item
+                        break
+
+                if last_text_item:
+                    last_text_item['text'] = (
+                        last_text_item.get('text', '')
+                        + '\n\nIMPORTANT: You must respond with valid JSON format.'
+                    )
+
+        return modified_messages
 
     async def _create_completion(
         self,
@@ -116,9 +219,15 @@ class OpenAIClient(BaseOpenAIClient):
             model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
         )
 
+        # For Alibaba Cloud, ensure 'json' is in messages for JSON mode
+        if self._is_alibaba_provider():
+            modified_messages = self._ensure_json_in_messages(messages)
+        else:
+            modified_messages = messages
+
         return await self.client.chat.completions.create(
             model=model,
-            messages=messages,
+            messages=modified_messages,
             temperature=temperature if not is_reasoning_model else None,
             max_tokens=max_tokens,
             response_format={'type': 'json_object'},
