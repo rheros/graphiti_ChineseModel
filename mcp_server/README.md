@@ -21,7 +21,7 @@ The Graphiti MCP server provides comprehensive knowledge graph capabilities:
 - **Group Management**: Organize and manage groups of related data with group_id filtering
 - **Graph Maintenance**: Clear the graph and rebuild indices
 - **Graph Database Support**: Multiple backend options including FalkorDB (default) and Neo4j
-- **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, and Azure OpenAI
+- **Multiple LLM Providers**: Support for OpenAI, Anthropic, Gemini, Groq, Azure OpenAI, DeepSeek, and Qwen
 - **Multiple Embedding Providers**: Support for OpenAI, Voyage, Sentence Transformers, and Gemini embeddings
 - **Rich Entity Types**: Built-in entity types including Preferences, Requirements, Procedures, Locations, Events, Organizations, Documents, and more for structured knowledge extraction
 - **HTTP Transport**: Default HTTP transport with MCP endpoint at `/mcp/` for broad client compatibility
@@ -157,14 +157,14 @@ database:
 
 ### Configuration File (config.yaml)
 
-The server supports multiple LLM providers (OpenAI, Anthropic, Gemini, Groq) and embedders. Edit `config.yaml` to configure:
+The server supports multiple LLM providers (OpenAI, Anthropic, Gemini, Groq, DeepSeek, Qwen) and embedders. Edit `config.yaml` to configure:
 
 ```yaml
 server:
   transport: "http"  # Default. Options: stdio, http
 
 llm:
-  provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai"
+  provider: "openai"  # or "anthropic", "gemini", "groq", "azure_openai", "deepseek", "qwen"
   model: "gpt-4.1"  # Default model
 
 database:
@@ -230,6 +230,8 @@ The `config.yaml` file supports environment variable expansion using `${VAR_NAME
 - `ANTHROPIC_API_KEY`: Anthropic API key (for Claude models)
 - `GOOGLE_API_KEY`: Google API key (for Gemini models)
 - `GROQ_API_KEY`: Groq API key (for Groq models)
+- `DEEPSEEK_API_KEY`: DeepSeek API key (for DeepSeek models)
+- `QWEN_API_KEY`: Qwen (Tongyi Qianwen) API key (for Qwen models)
 - `AZURE_OPENAI_API_KEY`: Azure OpenAI API key
 - `AZURE_OPENAI_ENDPOINT`: Azure OpenAI endpoint URL
 - `AZURE_OPENAI_DEPLOYMENT`: Azure OpenAI deployment name
@@ -317,7 +319,7 @@ uv run graphiti_mcp_server.py --config config/config-docker-falkordb.yaml
 ### Available Command-Line Arguments
 
 - `--config`: Path to YAML configuration file (default: config.yaml)
-- `--llm-provider`: LLM provider to use (openai, anthropic, gemini, groq, azure_openai)
+- `--llm-provider`: LLM provider to use (openai, azure_openai, anthropic, gemini, groq, deepseek, qwen)
 - `--embedder-provider`: Embedder provider to use (openai, azure_openai, gemini, voyage)
 - `--database-provider`: Database provider to use (falkordb, neo4j) - default: falkordb
 - `--model`: Model name to use with the LLM client

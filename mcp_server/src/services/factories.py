@@ -19,6 +19,8 @@ except ImportError:
 # Kuzu support removed - FalkorDB is now the default
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
+from graphiti_core.llm_client.deepseek_client import DeepSeekClient
+from graphiti_core.llm_client.qwen_client import QwenClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
 
 # Try to import additional providers if available
@@ -246,6 +248,46 @@ class LLMClientFactory:
                 )
                 return GroqClient(config=llm_config)
 
+            case 'deepseek':
+                if not config.providers.deepseek:
+                    raise ValueError('DeepSeek provider configuration not found')
+
+                api_key = config.providers.deepseek.api_key
+                _validate_api_key('DeepSeek', api_key, logger)
+
+                llm_config = GraphitiLLMConfig(
+                    api_key=api_key,
+                    base_url=config.providers.deepseek.api_url,
+                    responses_url=config.providers.deepseek.responses_url,
+                    model=config.model,
+                    temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                )
+                # Use DeepSeekClient for DeepSeek (OpenAI compatible API with DeepSeek-specific implementation)
+                return DeepSeekClient(config=llm_config)
+
+            case 'qwen':
+                if not config.providers.qwen:
+                    raise ValueError('Qwen provider configuration not found')
+
+                api_key = config.providers.qwen.api_key
+                _validate_api_key('Qwen', api_key, logger)
+                # Qwen DashScope expects API key with "sk-" prefix
+                # If the key doesn't already start with "sk-", prepend it
+                if api_key and not api_key.startswith('sk-'):
+                    api_key = f'sk-{api_key}'
+
+                llm_config = GraphitiLLMConfig(
+                    api_key=api_key,
+                    base_url=config.providers.qwen.api_url,
+                    responses_url=config.providers.qwen.responses_url,
+                    model=config.model,
+                    temperature=config.temperature,
+                    max_tokens=config.max_tokens,
+                )
+                # Use QwenClient for Qwen (OpenAI compatible API with Qwen-specific implementation)
+                return QwenClient(config=llm_config)
+
             case _:
                 raise ValueError(f'Unsupported LLM provider: {provider}')
 
@@ -355,6 +397,26 @@ class EmbedderFactory:
                     embedding_dim=config.dimensions or 1024,
                 )
                 return VoyageAIEmbedder(config=voyage_config)
+
+            case 'qwen':
+                if not config.providers.qwen:
+                    raise ValueError('Qwen provider configuration not found')
+                qwen_config = config.providers.qwen
+
+                api_key = qwen_config.api_key
+                _validate_api_key('Qwen Embedder', api_key, logger)
+                # Qwen DashScope expects API key with "sk-" prefix
+                if api_key and not api_key.startswith('sk-'):
+                    api_key = f'sk-{api_key}'
+
+                from graphiti_core.embedder.openai import OpenAIEmbedderConfig
+
+                embedder_config = OpenAIEmbedderConfig(
+                    api_key=api_key,
+                    embedding_model=config.model,
+                    base_url=qwen_config.api_url,
+                )
+                return OpenAIEmbedder(config=embedder_config)
 
             case _:
                 raise ValueError(f'Unsupported Embedder provider: {provider}')

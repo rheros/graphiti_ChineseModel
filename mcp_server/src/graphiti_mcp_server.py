@@ -796,7 +796,7 @@ async def initialize_server() -> ServerConfig:
     # Provider selection arguments
     parser.add_argument(
         '--llm-provider',
-        choices=['openai', 'azure_openai', 'anthropic', 'gemini', 'groq'],
+        choices=['openai', 'azure_openai', 'anthropic', 'gemini', 'groq', 'deepseek', 'qwen'],
         help='LLM provider to use',
     )
     parser.add_argument(

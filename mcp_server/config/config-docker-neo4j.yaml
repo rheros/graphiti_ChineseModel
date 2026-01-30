@@ -7,8 +7,8 @@ server:
   port: 8000
   
 llm:
-  provider: "openai"  # Options: openai, azure_openai, anthropic, gemini, groq
-  model: "gpt-4o-mini"
+  provider: "qwen"  # Options: openai, azure_openai, anthropic, gemini, groq, deepseek, qwen
+  model: ${QWEN_MODEL:qwen-turbo}
   max_tokens: 4096
   
   providers:
@@ -38,8 +38,20 @@ llm:
       api_key: ${GROQ_API_KEY}
       api_url: ${GROQ_API_URL:https://api.groq.com/openai/v1}
 
+    # DeepSeek provider configuration (OpenAI compatible)
+    deepseek:
+      api_key: ${DEEPSEEK_API_KEY}
+      api_url: ${DEEPSEEK_API_URL:https://api.deepseek.com/v1}
+
+    # Qwen (Tongyi Qianwan) provider configuration via DashScope compatible mode
+    # Note: API key will automatically be prefixed with 'sk-' if not already present
+    qwen:
+      api_key: ${QWEN_API_KEY}
+      api_url: ${QWEN_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      responses_url: ${QWEN_RESPONSES_URL:https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1}
+
 embedder:
-  provider: "openai"  # Options: openai, azure_openai, gemini, voyage
+  provider: "qwen"  # Options: openai, azure_openai, gemini, voyage, qwen
   model: "text-embedding-3-small"
   dimensions: 1536
   
@@ -65,6 +77,10 @@ embedder:
       api_key: ${VOYAGE_API_KEY}
       api_url: ${VOYAGE_API_URL:https://api.voyageai.com/v1}
       model: "voyage-3"
+
+    qwen:
+      api_key: ${QWEN_API_KEY}
+      api_url: ${QWEN_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
 
 database:
   provider: "neo4j"  # Using Neo4j for this configuration

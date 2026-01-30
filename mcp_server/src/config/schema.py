@@ -133,6 +133,22 @@ class VoyageProviderConfig(BaseModel):
     model: str = 'voyage-3'
 
 
+class DeepSeekProviderConfig(BaseModel):
+    """DeepSeek provider configuration."""
+
+    api_key: str | None = None
+    api_url: str = 'https://api.deepseek.com/v1'
+    responses_url: str | None = None
+
+
+class QwenProviderConfig(BaseModel):
+    """Qwen (DashScope) provider configuration."""
+
+    api_key: str | None = None
+    api_url: str = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    responses_url: str | None = None
+
+
 class LLMProvidersConfig(BaseModel):
     """LLM providers configuration."""
 
@@ -141,6 +157,8 @@ class LLMProvidersConfig(BaseModel):
     anthropic: AnthropicProviderConfig | None = None
     gemini: GeminiProviderConfig | None = None
     groq: GroqProviderConfig | None = None
+    deepseek: DeepSeekProviderConfig | None = None
+    qwen: QwenProviderConfig | None = None
 
 
 class LLMConfig(BaseModel):
@@ -162,6 +180,7 @@ class EmbedderProvidersConfig(BaseModel):
     azure_openai: AzureOpenAIProviderConfig | None = None
     gemini: GeminiProviderConfig | None = None
     voyage: VoyageProviderConfig | None = None
+    qwen: QwenProviderConfig | None = None
 
 
 class EmbedderConfig(BaseModel):

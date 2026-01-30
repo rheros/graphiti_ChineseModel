@@ -68,7 +68,7 @@ docker-compose up
 
 - **Main Entry Point**: `graphiti.py` - Contains the main `Graphiti` class that orchestrates all functionality
 - **Graph Storage**: `driver/` - Database drivers for Neo4j and FalkorDB
-- **LLM Integration**: `llm_client/` - Clients for OpenAI, Anthropic, Gemini, Groq
+- **LLM Integration**: `llm_client/` - Clients for OpenAI, Anthropic, Gemini, Groq, DeepSeek, Qwen
 - **Embeddings**: `embedder/` - Embedding clients for various providers
 - **Graph Elements**: `nodes.py`, `edges.py` - Core graph data structures
 - **Search**: `search/` - Hybrid search implementation with configurable strategies
@@ -98,7 +98,7 @@ docker-compose up
 
 - `OPENAI_API_KEY` - Required for LLM inference and embeddings
 - `USE_PARALLEL_RUNTIME` - Optional boolean for Neo4j parallel runtime (enterprise only)
-- Provider-specific keys: `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `GROQ_API_KEY`, `VOYAGE_API_KEY`
+- Provider-specific keys: `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `GROQ_API_KEY`, `VOYAGE_API_KEY`, `DEEPSEEK_API_KEY`, `QWEN_API_KEY`
 
 ### Database Setup
 
