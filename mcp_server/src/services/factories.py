@@ -260,6 +260,19 @@ class LLMClientFactory:
                 if config.model and 'coder' in config.model.lower():
                     small_model = config.model  # If already using coder model, use same for small tasks
 
+                # DeepSeek has a max_tokens limit of 4096 for most models
+                # DeepSeek-V3 and DeepSeek-Coder have different limits
+                deepseek_max_limit = 4096
+                if config.model and 'v3' in config.model.lower():
+                    deepseek_max_limit = 8192
+
+                max_tokens = config.max_tokens
+                if max_tokens > deepseek_max_limit:
+                    logger.warning(
+                        f'DeepSeek max_tokens capped at {deepseek_max_limit} for model {config.model} (requested {max_tokens})'
+                    )
+                    max_tokens = deepseek_max_limit
+
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     base_url=config.providers.deepseek.api_url,
@@ -267,7 +280,7 @@ class LLMClientFactory:
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,
-                    max_tokens=config.max_tokens,
+                    max_tokens=max_tokens,
                 )
                 # Use DeepSeekClient for DeepSeek (OpenAI compatible API with DeepSeek-specific implementation)
                 return DeepSeekClient(config=llm_config)
@@ -299,6 +312,12 @@ class LLMClientFactory:
                         # Default to qwen-turbo for small tasks
                         small_model = 'qwen-turbo'
 
+                # Qwen has a max_tokens limit of 8192
+                max_tokens = config.max_tokens
+                if max_tokens > 8192:
+                    logger.warning(f'Qwen max_tokens capped at 8192 (requested {max_tokens})')
+                    max_tokens = 8192
+
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     base_url=config.providers.qwen.api_url,
@@ -306,7 +325,7 @@ class LLMClientFactory:
                     model=config.model,
                     small_model=small_model,
                     temperature=config.temperature,
-                    max_tokens=config.max_tokens,
+                    max_tokens=max_tokens,
                 )
                 # Use QwenClient for Qwen (OpenAI compatible API with Qwen-specific implementation)
                 return QwenClient(config=llm_config)
@@ -438,6 +457,7 @@ class EmbedderFactory:
                     api_key=api_key,
                     embedding_model=config.model,
                     base_url=qwen_config.api_url,
+                    max_batch_size=10,  # Qwen embedding API has batch size limit of 10
                 )
                 return OpenAIEmbedder(config=embedder_config)
 

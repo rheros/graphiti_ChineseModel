@@ -28,6 +28,7 @@ class OpenAIEmbedderConfig(EmbedderConfig):
     embedding_model: EmbeddingModel | str = DEFAULT_EMBEDDING_MODEL
     api_key: str | None = None
     base_url: str | None = None
+    max_batch_size: int = 2048  # OpenAI's limit is 2048 texts per request
 
 
 class OpenAIEmbedder(EmbedderClient):
@@ -60,7 +61,23 @@ class OpenAIEmbedder(EmbedderClient):
         return result.data[0].embedding[: self.config.embedding_dim]
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
-        result = await self.client.embeddings.create(
-            input=input_data_list, model=self.config.embedding_model
-        )
-        return [embedding.embedding[: self.config.embedding_dim] for embedding in result.data]
+        max_batch_size = self.config.max_batch_size
+        if len(input_data_list) <= max_batch_size:
+            result = await self.client.embeddings.create(
+                input=input_data_list, model=self.config.embedding_model
+            )
+            return [embedding.embedding[: self.config.embedding_dim] for embedding in result.data]
+        
+        # Split into chunks of max_batch_size
+        chunks = [
+            input_data_list[i:i + max_batch_size]
+            for i in range(0, len(input_data_list), max_batch_size)
+        ]
+        all_embeddings = []
+        for chunk in chunks:
+            result = await self.client.embeddings.create(
+                input=chunk, model=self.config.embedding_model
+            )
+            chunk_embeddings = [embedding.embedding[: self.config.embedding_dim] for embedding in result.data]
+            all_embeddings.extend(chunk_embeddings)
+        return all_embeddings

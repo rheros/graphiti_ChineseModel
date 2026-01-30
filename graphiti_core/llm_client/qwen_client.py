@@ -81,7 +81,20 @@ class QwenClient(BaseOpenAIClient):
         endpoint with JSON format instead.
         """
         import json
+        import logging
         from pydantic import TypeAdapter
+
+        logger = logging.getLogger(__name__)
+
+        # Qwen has a max_tokens limit of 8192 for most models
+        qwen_max_limit = 8192
+
+        # Cap max_tokens at the provider's limit
+        if max_tokens > qwen_max_limit:
+            logger.warning(
+                f'Qwen max_tokens capped at {qwen_max_limit} for model {model} (requested {max_tokens})'
+            )
+            max_tokens = qwen_max_limit
 
         # Generate JSON schema from the response model
         schema = TypeAdapter(response_model).json_schema()
@@ -116,6 +129,20 @@ class QwenClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a regular completion with JSON format."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Qwen has a max_tokens limit of 8192 for most models
+        qwen_max_limit = 8192
+
+        # Cap max_tokens at the provider's limit
+        if max_tokens > qwen_max_limit:
+            logger.warning(
+                f'Qwen max_tokens capped at {qwen_max_limit} for model {model} (requested {max_tokens})'
+            )
+            max_tokens = qwen_max_limit
+
         # Reasoning models (gpt-5 family) don't support temperature
         is_reasoning_model = (
             model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
