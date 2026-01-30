@@ -12,7 +12,7 @@ server:
   
 llm:
   provider: "qwen"  # Options: openai, azure_openai, anthropic, gemini, groq, deepseek, qwen
-  model: ${QWEN_MODEL:qwen-turbo}
+  model: ${QWEN_MODEL:qwen3-max-2026-01-23}
   max_tokens: 4096
   
   providers:

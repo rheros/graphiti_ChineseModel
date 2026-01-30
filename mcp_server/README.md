@@ -11,6 +11,329 @@ This is an experimental Model Context Protocol (MCP) server implementation for G
 Graphiti's key functionality through the MCP protocol, allowing AI assistants to interact with Graphiti's knowledge
 graph capabilities.
 
+## 国内大模型快速启动 (Chinese LLM Providers Quick Start)
+本功能是由 AI 完全开发完成，本文档也是由 AI 生成，基本写入读取我自己已经测试了，确实可用
+本仓库没有使用fork，因为 AI 改动的地方比较多，
+原库的地址为：https://github.com/getzep/graphiti
+
+* deepseek 的chat 大模型可以使用
+* embedder deepseek 的没有，默认就使用了 千问的
+* 千问的 大模型和 embedder 是正常使用的
+* 我链接的数据库是 neo4j
+### 环境准备
+
+```bash
+# 克隆仓库（国内大模型定制版）
+git clone git@github.com:rheros/graphiti_ChineseModel.git
+cd graphiti_ChineseModel/mcp_server
+
+# 安装依赖（使用uv）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
+
+# 或直接使用pip
+pip install -r requirements.txt
+```
+
+### 配置国内大模型
+
+复制环境配置模板：
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 文件，配置您要使用的国内大模型：
+
+#### 使用 DeepSeek
+```bash
+# LLM配置
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=sk-your-deepseek-api-key
+DEEPSEEK_MODEL=deepseek-chat
+
+# Embedding配置（建议同时使用）
+EMBEDDER_PROVIDER=qwen
+QWEN_API_KEY=sk-your-qwen-api-key
+```
+
+#### 使用 Qwen (通义千问) - 默认推荐
+```bash
+# LLM配置（默认使用最新qwen3-max模型）
+LLM_PROVIDER=qwen
+QWEN_API_KEY=sk-your-qwen-api-key
+QWEN_MODEL=qwen3-max-2026-01-23
+
+# Embedding配置
+EMBEDDER_PROVIDER=qwen
+QWEN_API_KEY=sk-your-qwen-api-key
+```
+
+### 启动命令
+
+#### 方式一：使用Docker（推荐）
+```bash
+# 使用FalkorDB（默认）
+docker compose up
+
+# 或使用Neo4j
+docker compose -f docker/docker-compose-neo4j.yml up
+```
+
+#### 方式二：本地运行（需单独安装数据库）
+
+**基本启动命令**：
+```bash
+# 安装Neo4j或FalkorDB后运行
+python -m mcp_server.src.graphiti_mcp_server
+```
+
+**指定配置参数启动**：
+```bash
+# 默认启动（使用Qwen qwen3-max-2026-01-23 + text-embedding-v3）
+python -m mcp_server.src.graphiti_mcp_server
+
+# 使用DeepSeek + Qwen组合
+python -m mcp_server.src.graphiti_mcp_server \
+  --llm-provider deepseek \
+  --llm-model deepseek-chat \
+  --embedder-provider qwen \
+  --embedder-model text-embedding-v3
+
+# 使用Qwen全栈（指定模型）
+python -m mcp_server.src.graphiti_mcp_server \
+  --llm-provider qwen \
+  --llm-model qwen3-max-2026-01-23 \
+  --embedder-provider qwen \
+  --embedder-model text-embedding-v3
+
+# 指定数据库和端口
+python -m mcp_server.src.graphiti_mcp_server \
+  --database-provider neo4j \
+  --neo4j-uri bolt://localhost:7687 \
+  --neo4j-user neo4j \
+  --neo4j-password your-password \
+  --port 8000
+```
+
+**所有可用的启动参数**：
+```bash
+# 基础配置
+--llm-provider          # LLM提供商: openai, deepseek, qwen, anthropic, gemini, groq, azure_openai (默认: qwen)
+--llm-model            # LLM模型名称 (默认: qwen3-max-2026-01-23 或根据提供商自动选择)
+--embedder-provider     # Embedding提供商: openai, qwen, gemini, voyage (默认: openai)
+--embedder-model       # Embedding模型名称 (默认: text-embedding-3-small 或根据提供商自动选择)
+--port                 # 服务端口 (默认: 8000)
+--host                 # 服务主机 (默认: 0.0.0.0)
+
+# 数据库配置
+--database-provider    # 数据库: neo4j, falkordb (默认: falkordb)
+--neo4j-uri           # Neo4j连接地址
+--neo4j-user          # Neo4j用户名
+--neo4j-password      # Neo4j密码
+--falkordb-uri        # FalkorDB连接地址
+--falkordb-password   # FalkorDB密码
+
+# 高级配置
+--semaphore-limit     # 并发限制 (默认: 10)
+--group-id            # 默认group_id
+--transport           # 传输方式: http, stdio (默认: http)
+```
+
+**默认使用的模型**：
+- **LLM**：如果未指定，默认使用 `qwen3-max-2026-01-23` (Qwen通义千问)
+- **Embedding**：如果未指定，默认使用 `text-embedding-v3` (Qwen通义千问)
+- **DeepSeek用户**：自动使用 `deepseek-chat` 作为主模型，`deepseek-coder` 作为小模型
+- **Qwen用户**：自动使用 `qwen-turbo` 作为小模型，主模型默认使用 `qwen3-max-2026-01-23`
+
+### MCP客户端配置示例
+
+
+#### CodeBuddy配置
+在CodeBuddy的MCP设置中添加：
+```json
+{
+  "mcpServers": {
+    "graphiti": {
+      "url": "http://localhost:8000/mcp/",
+      "description": "Graphiti知识图谱 - 默认使用Qwen qwen3-max-2026-01-23"
+    }
+  }
+}
+```
+
+### AI助手智能使用指南（推荐Skill方式）
+
+为了让AI助手（如CodeBuddy）能够智能地自动使用Graphiti知识图谱，我们推荐使用Skill方式配置。
+
+#### 快速配置方法（推荐）
+
+**加载Graphiti MCP使用Skill：**
+
+```bash
+# 在CodeBuddy中加载Skill
+Load skill: c:\Users\TU\Documents\WorkingSpace\Graphiti\mcp_server\graphiti-mcp-usage
+```
+
+加载Skill后，AI助手将自动：
+- ✅ 识别有价值的信息并存储到知识图谱
+- ✅ 需要时自动检索历史信息
+- ✅ 提供个性化的连续对话体验
+- ✅ 记住用户偏好、学习笔记、项目信息
+- ✅ 基于历史信息提供智能建议
+
+#### Skill包含内容
+
+Skill目录：`graphiti-mcp-usage/`
+- **SKILL.md** - 主技能文件
+- **references/system-prompt-zh.md** - 详细使用说明
+- **README.md** - Skill使用指南
+
+#### 使用效果
+
+配置后，AI助手能够智能地进行以下操作：
+
+**自动存储示例：**
+```
+用户："今天学习了Python的装饰器，很有用"
+
+AI自动执行：
+✓ 已将Python装饰器学习笔记保存到知识图谱
+（自动添加标签：Procedure，智能分类）
+```
+
+**自动检索示例：**
+```
+用户："我之前说的那个Python知识点是什么？"
+
+AI自动执行：
+→ 搜索知识图谱中的Python相关内容
+→ 找到之前的学习记录
+✓ 回复："根据你的知识图谱记录，你之前学习了Python装饰器..."
+```
+
+**个性化建议示例：**
+```
+用户："我想学一个新的Python框架，有什么推荐？"
+
+AI自动执行：
+→ 分析你之前的学习记录
+→ 了解你的技术偏好
+✓ 回复："根据你之前的学习记录，你已经掌握了FastAPI，推荐你学习..."
+```
+
+#### 与传统配置方式的对比
+
+| 特性 | 加载Skill（推荐） | 配置System Prompt |
+|------|-------------------|-------------------|
+| 安装 | ✅ 一行命令完成 | ❌ 需要复制粘贴大量文本 |
+| 更新 | ✅ 重新加载即可 | ❌ 需要手动更新配置 |
+| 维护 | ✅ 集中维护 | ❌ 分散在各配置中 |
+| 可分享性 | ✅ 易于分享和复用 | ❌ 难以分享 |
+| 加载时机 | ✅ 按需加载，节省资源 | ❌ 始终占用上下文 |
+
+#### 备用方案：手动配置System Prompt
+
+如果AI助手不支持Skill加载，可以手动配置System Prompt。详情查看：[SYSTEM_PROMPT.md](./SYSTEM_PROMPT.md)
+
+**注意**：手动配置需要处理JSON转义问题。
+
+## Features
+
+1. **复制System Prompt模板**：
+   ```bash
+   cp SYSTEM_PROMPT.md your_system_prompt.txt
+   ```
+
+2. **在AI助手中配置**：
+   - 将`SYSTEM_PROMPT.md`的内容添加到AI助手的System Prompt中
+   - 启用`graphiti` MCP工具
+
+#### 配置示例
+
+##### CodeBuddy配置
+在CodeBuddy设置中添加自定义System Prompt：
+```json
+{
+  "systemPrompts": {
+    "graphiti_auto_mode": {
+      "content": "[将SYSTEM_PROMPT.md的内容粘贴到这里]",
+      "enabledTools": ["graphiti"],
+      "autoInvoke": true
+    }
+  }
+}
+```
+
+##### Claude Desktop配置
+在Claude Desktop的配置文件中添加：
+```json
+{
+  "mcpServers": {
+    "graphiti": {
+      "command": "python",
+      "args": ["-m", "mcp_server.src.graphiti_mcp_server"],
+      "env": {
+        "LLM_PROVIDER": "qwen",
+        "QWEN_API_KEY": "sk-your-key",
+        "EMBEDDER_PROVIDER": "qwen"
+      }
+    }
+  },
+  "systemPrompts": ["[将SYSTEM_PROMPT.md的内容粘贴到这里]"]
+}
+```
+
+#### System Prompt说明
+
+完整的System Prompt配置指南请查看：[SYSTEM_PROMPT.md](./SYSTEM_PROMPT.md)
+
+该System Prompt包含：
+- 🤖 **自动存储策略**：AI何时应该自动保存信息到知识图谱
+- 🔍 **自动检索策略**：AI何时应该搜索知识图谱中的历史信息
+- 💬 **交互模式**：支持完全自动、触发词、确认三种模式
+- 📝 **存储示例**：具体的使用示例和最佳实践
+- 🎛️ **配置参数**：完整的配置参数说明
+
+#### 使用效果
+
+配置System Prompt后，AI助手将能够：
+- ✅ 自动识别有价值的信息并存储
+- ✅ 在需要时自动检索历史信息
+- ✅ 提供个性化的连续对话体验
+- ✅ 记住用户偏好、学习笔记、项目信息
+- ✅ 基于历史信息提供智能建议
+
+#### 重要提示：JSON转义处理
+
+**问题**：SYSTEM_PROMPT.md中包含大量双引号，直接复制到JSON配置会导致解析错误。
+
+**解决方案**：
+
+1. **使用预转义的JSON文件（推荐）**
+   ```bash
+   # 我们已经为你准备了转义好的JSON配置文件
+   config/system-prompt.json
+   ```
+   直接复制该文件内容到你的AI助手配置中即可。
+
+2. **手动转义方法**
+   如果需要手动复制SYSTEM_PROMPT.md的内容，请将所有双引号替换为转义形式：
+   -  `"`  →  `\"`
+   -  例如：`"我喜欢Python"` → `\"我喜欢Python\"`
+
+   可以使用工具自动转义：
+   ```python
+   import json
+   with open('SYSTEM_PROMPT.md', 'r', encoding='utf-8') as f:
+       content = f.read()
+   escaped_content = json.dumps(content)
+   ```
+
+3. **在线转义工具**
+   使用在线JSON转义工具：
+   - https://www.freeformatter.com/json-escape.html
+   - https://www.jsonescape.com/
+
 ## Features
 
 The Graphiti MCP server provides comprehensive knowledge graph capabilities:
