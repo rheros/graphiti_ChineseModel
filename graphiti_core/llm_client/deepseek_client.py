@@ -74,19 +74,26 @@ class DeepSeekClient(BaseOpenAIClient):
         verbosity: str | None = None,
     ):
         """Create a structured completion using chat completions with JSON format.
-        
+
         DeepSeek's API is OpenAI-compatible but may not fully support the
         beta responses.parse endpoint. We use the standard chat completions
         endpoint with JSON format instead.
         """
-        # Add instruction for JSON output to the last message
+        import json
+        from pydantic.json_schema import generate_json_schema, JsonSchemaValue
+
+        # Generate JSON schema from the response model
+        schema = generate_json_schema(response_model)
+
+        # Add JSON schema instruction to the last message
         enhanced_messages = list(messages)
         if enhanced_messages and enhanced_messages[-1].get('role') == 'user':
             last_message = enhanced_messages[-1]
             content = last_message.get('content', '')
-            if content and not content.strip().endswith('output JSON format.'):
-                last_message['content'] = content + '\n\nOutput your response in valid JSON format.'
-        
+            schema_json = json.dumps(schema, indent=2, ensure_ascii=False)
+            instruction = f'\n\nYour response must be valid JSON that matches this schema:\n{schema_json}'
+            last_message['content'] = content + instruction
+
         response = await self.client.chat.completions.create(
             model=model,
             messages=enhanced_messages,
@@ -94,7 +101,7 @@ class DeepSeekClient(BaseOpenAIClient):
             max_tokens=max_tokens,
             response_format={'type': 'json_object'},
         )
-        
+
         return response
 
     async def _create_completion(
