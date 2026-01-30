@@ -80,10 +80,10 @@ class DeepSeekClient(BaseOpenAIClient):
         endpoint with JSON format instead.
         """
         import json
-        from pydantic.json_schema import generate_json_schema, JsonSchemaValue
+        from pydantic import TypeAdapter
 
         # Generate JSON schema from the response model
-        schema = generate_json_schema(response_model)
+        schema = TypeAdapter(response_model).json_schema()
 
         # Add JSON schema instruction to the last message
         enhanced_messages = list(messages)
