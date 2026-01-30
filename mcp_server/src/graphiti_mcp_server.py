@@ -157,6 +157,41 @@ queue_service: QueueService | None = None
 graphiti_client: Graphiti | None = None
 semaphore: asyncio.Semaphore
 
+# Initialization lock and state
+init_lock = asyncio.Lock()
+is_initialized = False
+
+
+async def wait_for_initialization(timeout: float = 30.0) -> bool:
+    """Wait for server initialization to complete.
+
+    Args:
+        timeout: Maximum time to wait in seconds.
+
+    Returns:
+        True if initialized, False if timeout occurred.
+    """
+    # Wait for initialization flag
+    for _ in range(int(timeout * 10)):  # Check 10 times per second
+        if is_initialized:
+            return True
+        await asyncio.sleep(0.1)
+
+    return False
+
+
+async def check_initialization() -> ErrorResponse | None:
+    """Check if server is initialized and ready to process requests.
+
+    Returns:
+        ErrorResponse if not initialized, None otherwise.
+    """
+    if not is_initialized:
+        if not await wait_for_initialization():
+            logger.warning('Request received before initialization completed')
+            return ErrorResponse(error='Server initialization not complete, please try again')
+    return None
+
 
 class GraphitiService:
     """Graphiti service using the unified configuration system."""
@@ -365,6 +400,11 @@ async def add_memory(
             source_description="CRM data"
         )
     """
+    # Check initialization status
+    init_error = await check_initialization()
+    if init_error:
+        return init_error
+
     global graphiti_service, queue_service
 
     if graphiti_service is None or queue_service is None:
@@ -419,6 +459,11 @@ async def search_nodes(
         max_nodes: Maximum number of nodes to return (default: 10)
         entity_types: Optional list of entity type names to filter by
     """
+    # Check initialization status
+    init_error = await check_initialization()
+    if init_error:
+        return init_error
+
     global graphiti_service
 
     if graphiti_service is None:
@@ -499,6 +544,11 @@ async def search_memory_facts(
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
     """
+    # Check initialization status
+    init_error = await check_initialization()
+    if init_error:
+        return init_error
+
     global graphiti_service
 
     if graphiti_service is None:
@@ -545,6 +595,11 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     Args:
         uuid: UUID of the entity edge to delete
     """
+    # Check initialization status
+    init_error = await check_initialization()
+    if init_error:
+        return init_error
+
     global graphiti_service
 
     if graphiti_service is None:
@@ -571,6 +626,11 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     Args:
         uuid: UUID of the episode to delete
     """
+    # Check initialization status
+    init_error = await check_initialization()
+    if init_error:
+        return init_error
+
     global graphiti_service
 
     if graphiti_service is None:
@@ -597,6 +657,11 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     Args:
         uuid: UUID of the entity edge to retrieve
     """
+    # Check initialization status
+    init_error = await check_initialization()
+    if init_error:
+        return init_error
+
     global graphiti_service
 
     if graphiti_service is None:
@@ -628,6 +693,11 @@ async def get_episodes(
         group_ids: Optional list of group IDs to filter results
         max_episodes: Maximum number of episodes to return (default: 10)
     """
+    # Check initialization status
+    init_error = await check_initialization()
+    if init_error:
+        return init_error
+
     global graphiti_service
 
     if graphiti_service is None:
@@ -692,6 +762,11 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
     Args:
         group_ids: Optional list of group IDs to clear. If not provided, clears the default group.
     """
+    # Check initialization status
+    init_error = await check_initialization()
+    if init_error:
+        return init_error
+
     global graphiti_service
 
     if graphiti_service is None:
@@ -723,6 +798,11 @@ async def clear_graph(group_ids: list[str] | None = None) -> SuccessResponse | E
 @mcp.tool()
 async def get_status() -> StatusResponse:
     """Get the status of the Graphiti MCP server and database connection."""
+    # Check initialization status
+    init_error = await check_initialization()
+    if init_error:
+        return StatusResponse(status='error', message='Server initialization not complete')
+
     global graphiti_service
 
     if graphiti_service is None:
@@ -894,6 +974,11 @@ async def initialize_server() -> ServerConfig:
 
     # Initialize queue service with the client
     await queue_service.initialize(graphiti_client)
+
+    # Mark initialization as complete
+    global is_initialized
+    is_initialized = True
+    logger.info('MCP Server initialization complete')
 
     # Set MCP server settings
     if config.server.host:

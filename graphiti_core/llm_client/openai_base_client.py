@@ -114,15 +114,33 @@ class BaseOpenAIClient(LLMClient):
             return self.model or DEFAULT_MODEL
 
     def _handle_structured_response(self, response: Any) -> dict[str, Any]:
-        """Handle structured response parsing and validation."""
-        response_object = response.output_text
+        """Handle structured response parsing and validation.
 
-        if response_object:
-            return json.loads(response_object)
-        elif response_object.refusal:
-            raise RefusalError(response_object.refusal)
+        Supports both responses.parse format (with output_text) and
+        chat.completions format (with choices[0].message.content).
+        """
+        # Handle responses.parse format (OpenAI native)
+        if hasattr(response, 'output_text'):
+            response_object = response.output_text
+            if response_object:
+                return json.loads(response_object)
+            elif hasattr(response_object, 'refusal') and response_object.refusal:
+                raise RefusalError(response_object.refusal)
+            else:
+                raise Exception(f'Invalid response from LLM: {response_object.model_dump()}')
+
+        # Handle chat.completions format (OpenAI-compatible APIs like Qwen, DeepSeek)
+        elif hasattr(response, 'choices') and len(response.choices) > 0:
+            content = response.choices[0].message.content
+            if content:
+                return json.loads(content)
+            elif hasattr(response.choices[0].message, 'refusal') and response.choices[0].message.refusal:
+                raise RefusalError(response.choices[0].message.refusal)
+            else:
+                raise Exception(f'Invalid response from LLM: no content in response')
+
         else:
-            raise Exception(f'Invalid response from LLM: {response_object.model_dump()}')
+            raise Exception(f'Unsupported response format: {type(response)}')
 
     def _handle_json_response(self, response: Any) -> dict[str, Any]:
         """Handle JSON response parsing."""

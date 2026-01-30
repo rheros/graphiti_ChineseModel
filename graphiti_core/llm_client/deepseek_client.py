@@ -60,14 +60,8 @@ class DeepSeekClient(BaseOpenAIClient):
 
         if client is None:
             self.client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
-            # Create separate client for responses API if different URL is provided
-            if config.responses_url and config.responses_url != config.base_url:
-                self.responses_client = AsyncOpenAI(api_key=config.api_key, base_url=config.responses_url)
-            else:
-                self.responses_client = self.client
         else:
             self.client = client
-            self.responses_client = client
 
     async def _create_structured_completion(
         self,
@@ -79,32 +73,28 @@ class DeepSeekClient(BaseOpenAIClient):
         reasoning: str | None = None,
         verbosity: str | None = None,
     ):
-        """Create a structured completion using OpenAI's beta parse API."""
-        # Reasoning models (gpt-5 family) don't support temperature
-        is_reasoning_model = (
-            model.startswith('gpt-5') or model.startswith('o1') or model.startswith('o3')
+        """Create a structured completion using chat completions with JSON format.
+        
+        DeepSeek's API is OpenAI-compatible but may not fully support the
+        beta responses.parse endpoint. We use the standard chat completions
+        endpoint with JSON format instead.
+        """
+        # Add instruction for JSON output to the last message
+        enhanced_messages = list(messages)
+        if enhanced_messages and enhanced_messages[-1].get('role') == 'user':
+            last_message = enhanced_messages[-1]
+            content = last_message.get('content', '')
+            if content and not content.strip().endswith('output JSON format.'):
+                last_message['content'] = content + '\n\nOutput your response in valid JSON format.'
+        
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=enhanced_messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={'type': 'json_object'},
         )
-
-        request_kwargs = {
-            'model': model,
-            'input': messages,  # type: ignore
-            'max_output_tokens': max_tokens,
-            'text_format': response_model,  # type: ignore
-        }
-
-        temperature_value = temperature if not is_reasoning_model else None
-        if temperature_value is not None:
-            request_kwargs['temperature'] = temperature_value
-
-        # Only include reasoning and verbosity parameters for reasoning models
-        if is_reasoning_model and reasoning is not None:
-            request_kwargs['reasoning'] = {'effort': reasoning}  # type: ignore
-
-        if is_reasoning_model and verbosity is not None:
-            request_kwargs['text'] = {'verbosity': verbosity}  # type: ignore
-
-        response = await self.responses_client.responses.parse(**request_kwargs)
-
+        
         return response
 
     async def _create_completion(
