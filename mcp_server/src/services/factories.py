@@ -255,11 +255,17 @@ class LLMClientFactory:
                 api_key = config.providers.deepseek.api_key
                 _validate_api_key('DeepSeek', api_key, logger)
 
+                # Determine small model for DeepSeek - use DeepSeek-V3 as main, DeepSeek-Coder as small
+                small_model = 'deepseek-coder'
+                if config.model and 'coder' in config.model.lower():
+                    small_model = config.model  # If already using coder model, use same for small tasks
+
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     base_url=config.providers.deepseek.api_url,
                     responses_url=config.providers.deepseek.responses_url,
                     model=config.model,
+                    small_model=small_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
@@ -277,11 +283,28 @@ class LLMClientFactory:
                 if api_key and not api_key.startswith('sk-'):
                     api_key = f'sk-{api_key}'
 
+                # Determine small model for Qwen
+                small_model = 'qwen-plus'
+                if config.model:
+                    # If using a smaller model for main, use same for small tasks
+                    if 'turbo' in config.model.lower() or 'lite' in config.model.lower():
+                        small_model = config.model
+                    # If using max or custom models, use turbo for small tasks
+                    elif 'max' in config.model.lower() or 'vl' in config.model.lower():
+                        small_model = 'qwen-turbo'
+                    # For custom model names (like qwen3-max-2026-01-23), also use turbo
+                    elif 'qwen' not in config.model.lower():
+                        small_model = config.model
+                    else:
+                        # Default to qwen-turbo for small tasks
+                        small_model = 'qwen-turbo'
+
                 llm_config = GraphitiLLMConfig(
                     api_key=api_key,
                     base_url=config.providers.qwen.api_url,
                     responses_url=config.providers.qwen.responses_url,
                     model=config.model,
+                    small_model=small_model,
                     temperature=config.temperature,
                     max_tokens=config.max_tokens,
                 )
