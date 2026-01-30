@@ -458,6 +458,7 @@ class EmbedderFactory:
                     embedding_model=config.model,
                     base_url=qwen_config.api_url,
                     max_batch_size=10,  # Qwen embedding API has batch size limit of 10
+                    requests_per_second=15.0,  # Qwen Embedding API rate limit: ~15 QPS
                 )
                 return OpenAIEmbedder(config=embedder_config)
 
