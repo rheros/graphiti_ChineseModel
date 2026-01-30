@@ -154,6 +154,7 @@ python -m mcp_server.src.graphiti_mcp_server \
 {
   "mcpServers": {
     "graphiti": {
+      "transport": "sse",
       "url": "http://localhost:8000/mcp/",
       "description": "Graphiti知识图谱 - 默认使用Qwen qwen3-max-2026-01-23"
     }
