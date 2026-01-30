@@ -4,6 +4,10 @@
   </a>
 </p>
 
+<p align="center">
+  <strong><a href="mcp_server/README.md">👉 希望使用 Graphiti MCP 支持国内模型？点击这里查看 MCP Server 文档</a></strong>
+</p>
+
 <h1 align="center">
 Graphiti
 </h1>
