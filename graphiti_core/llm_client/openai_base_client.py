@@ -113,6 +113,46 @@ class BaseOpenAIClient(LLMClient):
         else:
             return self.model or DEFAULT_MODEL
 
+    def _try_parse_json(self, json_str: str) -> dict[str, Any]:
+        """Try to parse JSON, with fallback cleaning for common issues."""
+        import re
+        
+        # First try direct parsing
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            logger.debug(f'Initial JSON parse failed: {e}')
+            
+        # Try common fixes
+        cleaned = json_str
+        
+        # Fix 1: Replace single quotes with double quotes, but be careful with string content
+        # This is a simple approach - for production, consider a more robust solution
+        # Count quotes to see if we have mismatched quotes
+        single_quotes = cleaned.count("'")
+        double_quotes = cleaned.count('"')
+        
+        # If we have mostly single quotes and few double quotes, try replacing outer single quotes
+        if single_quotes > double_quotes * 2:
+            # Simple pattern: replace single quotes at word boundaries (not perfect)
+            # This might break string content with apostrophes
+            pass
+        
+        # Fix 2: Remove trailing commas in objects/arrays
+        # Remove trailing commas before closing braces/brackets
+        cleaned = re.sub(r',\s*}', '}', cleaned)
+        cleaned = re.sub(r',\s*]', ']', cleaned)
+        
+        # Fix 3: Escape unescaped newlines in strings (very basic)
+        # This is complex; better to reject such JSON
+        
+        # Try parsing again
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            logger.error(f'Failed to parse JSON even after cleaning: {cleaned[:200]}...')
+            raise Exception(f'Invalid JSON response from LLM: {e}')
+
     def _handle_structured_response(self, response: Any) -> dict[str, Any]:
         """Handle structured response parsing and validation.
 
@@ -133,7 +173,7 @@ class BaseOpenAIClient(LLMClient):
         elif hasattr(response, 'choices') and len(response.choices) > 0:
             content = response.choices[0].message.content
             if content:
-                return json.loads(content)
+                return self._try_parse_json(content)
             elif hasattr(response.choices[0].message, 'refusal') and response.choices[0].message.refusal:
                 raise RefusalError(response.choices[0].message.refusal)
             else:
@@ -145,7 +185,7 @@ class BaseOpenAIClient(LLMClient):
     def _handle_json_response(self, response: Any) -> dict[str, Any]:
         """Handle JSON response parsing."""
         result = response.choices[0].message.content or '{}'
-        return json.loads(result)
+        return self._try_parse_json(result)
 
     async def _generate_response(
         self,

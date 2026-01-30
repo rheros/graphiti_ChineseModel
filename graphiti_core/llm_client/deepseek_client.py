@@ -106,7 +106,7 @@ class DeepSeekClient(BaseOpenAIClient):
         if enhanced_messages and enhanced_messages[-1].get('role') == 'user':
             last_message = enhanced_messages[-1]
             content = last_message.get('content', '')
-            schema_json = json.dumps(schema, indent=2, ensure_ascii=False)
+            schema_json = json.dumps(schema, indent=2, ensure_ascii=True)
             instruction = f'\n\nYour response must be valid JSON that matches this schema:\n{schema_json}'
             last_message['content'] = content + instruction
 
