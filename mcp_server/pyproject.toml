@@ -66,7 +66,7 @@ graphiti-core = { path = "../", editable = true }
 dev = [
     "faker>=37.12.0",
     "httpx>=0.28.1",
-    "psutil>=7.1.2",
+    "psutil>=7.2.2",
     "pyright>=1.1.404",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.21.0",
